@@ -1,3 +1,5 @@
+import base64
+
 from flask import (Flask,
                    render_template,
                    redirect,
@@ -9,8 +11,9 @@ from flask_login import (LoginManager,
                          logout_user)
 from mockdbhelper import MockDBHelper as DBHelper
 from user import User
+from passwordhelper import PasswordHelper
 
-
+PH = PasswordHelper()
 DB = DBHelper()
 
 app = Flask(__name__)
@@ -40,8 +43,8 @@ def account():
 def login():
     email = request.form.get("email")
     password = request.form.get("password")
-    user_password = DB.get_user(email)
-    if user_password and user_password == password:
+    stored_user = DB.get_user(email)
+    if stored_user and PH.validate_password(password, stored_user['salt'], stored_user['hashed']):
         user = User(email)
         login_user(user, remember=True)
         return redirect(url_for('account'))
@@ -52,6 +55,21 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("home"))
+
+
+@app.route("/register", methods=["POST"])
+def register():
+    email = request.form.get("email")
+    pw1 = request.form.get("password")
+    pw2 = request.form.get("password2")
+    if not pw1 == pw2:
+        return redirect(url_for('home'))
+    if DB.get_user(email):
+        return redirect(url_for('home'))
+    salt = PH.get_salt().decode('utf-8')
+    hashed = PH.get_hash(pw1 + salt)
+    DB.add_user(email, salt, hashed)
+    return redirect(url_for('home'))
 
 
 if __name__ == '__main__':
